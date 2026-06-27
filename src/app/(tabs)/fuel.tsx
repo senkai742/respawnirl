@@ -1,37 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  Modal,
-  TextInput,
-  FlatList,
-  Pressable,
-} from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
-import Animated, {
-  useAnimatedProps,
-  useSharedValue,
-  withTiming,
-  withRepeat,
-  withSequence,
-} from 'react-native-reanimated';
-import { Colors } from '@/constants/theme';
-import { useFuel } from '@/context/FuelContext';
 import { NeonButton } from '@/components/NeonButton';
 import { StatBar } from '@/components/StatBar';
+import { Colors } from '@/constants/theme';
+import { useFuel } from '@/context/FuelContext';
+import React, { useEffect, useState } from 'react';
+import {
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View
+} from 'react-native';
+import { Calendar } from 'react-native-calendars';
+import Animated, {
+    useAnimatedProps,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
+} from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export default function FuelCore() {
-  const { items, targets, totals, isOverloaded, addConsumable, removeConsumable } = useFuel();
+  const {
+    selectedDate,
+    setSelectedDate,
+    items,
+    targets,
+    totals,
+    isOverloaded,
+    addConsumable,
+    removeConsumable,
+    updateTargets,
+  } = useFuel();
+  
   const [modalVisible, setModalVisible] = useState(false);
   const [itemName, setItemName] = useState('');
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
+
+  const [targetsModalVisible, setTargetsModalVisible] = useState(false);
+  const [targetCalories, setTargetCalories] = useState('');
+  const [targetProtein, setTargetProtein] = useState('');
+  const [targetCarbs, setTargetCarbs] = useState('');
+  const [targetFat, setTargetFat] = useState('');
 
   // SVG Ring values
   const radius = 80;
@@ -59,7 +79,7 @@ export default function FuelCore() {
     } else {
       pulseOpacity.value = 1;
     }
-  }, [totals.calories, isOverloaded, circumference]);
+  }, [totals.calories, targets.calories, isOverloaded, circumference]);
 
   const animatedCircleProps = useAnimatedProps(() => ({
     strokeDashoffset: animatedStroke.value,
@@ -86,6 +106,27 @@ export default function FuelCore() {
     setModalVisible(false);
   };
 
+  const handleUpdateTargets = () => {
+    if (!targetCalories || !targetProtein || !targetCarbs || !targetFat) return;
+
+    updateTargets({
+      calories: parseInt(targetCalories, 10),
+      protein: parseInt(targetProtein, 10),
+      carbs: parseInt(targetCarbs, 10),
+      fat: parseInt(targetFat, 10),
+    });
+
+    setTargetsModalVisible(false);
+  };
+
+  const openTargetsModal = () => {
+    setTargetCalories(targets.calories.toString());
+    setTargetProtein(targets.protein.toString());
+    setTargetCarbs(targets.carbs.toString());
+    setTargetFat(targets.fat.toString());
+    setTargetsModalVisible(true);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -99,89 +140,119 @@ export default function FuelCore() {
           </View>
         )}
 
-        <View style={styles.hudContainer}>
-          {/* Energy Core Ring */}
-          <View style={styles.ringContainer}>
-            <Svg height="200" width="200" viewBox="0 0 200 200">
-              <Circle
-                cx="100"
-                cy="100"
-                r={radius}
-                stroke={Colors.dark.border}
-                strokeWidth={strokeWidth}
-                fill="none"
-              />
-              <AnimatedCircle
-                cx="100"
-                cy="100"
-                r={radius}
-                stroke={ringColor}
-                strokeWidth={strokeWidth}
-                fill="none"
-                strokeDasharray={circumference}
-                animatedProps={animatedCircleProps}
-                strokeLinecap="round"
-                rotation="-90"
-                origin="100, 100"
-              />
-            </Svg>
-            <View style={styles.ringLabelContainer}>
-              <Text style={[styles.ringNumber, { color: ringColor }]}>
-                {remainingCals}
-              </Text>
-              <Text style={styles.ringSubtext}>KCAL REMAINING</Text>
-            </View>
-          </View>
-
-          {/* Character Status Bars */}
-          <View style={styles.statusBarsContainer}>
-            <StatBar
-              label="STR Status (Protein)"
-              current={totals.protein}
-              max={targets.protein}
-              color={Colors.dark.neonCyan}
-            />
-            <StatBar
-              label="VIT Status (Carbs)"
-              current={totals.carbs}
-              max={targets.carbs}
-              color={Colors.dark.neonPurple}
-            />
-            <StatBar
-              label="AGI Status (Fat)"
-              current={totals.fat}
-              max={targets.fat}
-              color={Colors.dark.neonOrange}
-            />
-          </View>
-        </View>
-
-        {/* Consumed List */}
-        <Text style={styles.listHeader}>Today's Manifest Log</Text>
-        <FlatList
-          data={items}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.itemCard}>
-              <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemStats}>
-                  {item.calories} kcal | {item.protein}g P | {item.carbs}g C | {item.fat}g F
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.hudContainer}>
+            {/* Energy Core Ring */}
+            <View style={styles.ringContainer}>
+              <Svg height="200" width="200" viewBox="0 0 200 200">
+                <Circle
+                  cx="100"
+                  cy="100"
+                  r={radius}
+                  stroke={Colors.dark.border}
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                />
+                <AnimatedCircle
+                  cx="100"
+                  cy="100"
+                  r={radius}
+                  stroke={ringColor}
+                  strokeWidth={strokeWidth}
+                  fill="none"
+                  strokeDasharray={circumference}
+                  animatedProps={animatedCircleProps}
+                  strokeLinecap="round"
+                  rotation="-90"
+                  origin="100, 100"
+                />
+              </Svg>
+              <View style={styles.ringLabelContainer}>
+                <Text style={[styles.ringNumber, { color: ringColor }]}>
+                  {remainingCals}
                 </Text>
+                <Text style={styles.ringSubtext}>KCAL REMAINING</Text>
               </View>
-              <Pressable
-                style={styles.deleteButton}
-                onPress={() => removeConsumable(item.id)}
-              >
-                <Text style={styles.deleteText}>Purge</Text>
-              </Pressable>
             </View>
-          )}
-          ListEmptyComponent={
+
+            {/* Character Status Bars */}
+            <View style={styles.statusBarsContainer}>
+              <StatBar
+                label="STR Status (Protein)"
+                current={totals.protein}
+                max={targets.protein}
+                color={Colors.dark.neonCyan}
+              />
+              <StatBar
+                label="VIT Status (Carbs)"
+                current={totals.carbs}
+                max={targets.carbs}
+                color={Colors.dark.neonPurple}
+              />
+              <StatBar
+                label="AGI Status (Fat)"
+                current={totals.fat}
+                max={targets.fat}
+                color={Colors.dark.neonOrange}
+              />
+            </View>
+            
+            <View style={{ marginTop: 16 }}>
+              <NeonButton
+                title="EDIT TARGETS"
+                onPress={openTargetsModal}
+                color={Colors.dark.neonCyan}
+              />
+            </View>
+          </View>
+
+          {/* Consumed List */}
+          <Text style={styles.listHeader}>Manifest Log ({selectedDate})</Text>
+          {items.length === 0 ? (
             <Text style={styles.emptyText}>No fuel consumed yet.</Text>
-          }
-          contentContainerStyle={styles.listContent}
-        />
+          ) : (
+            items.map((item) => (
+              <View style={styles.itemCard} key={item.id}>
+                <View style={styles.itemDetails}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemStats}>
+                    {item.calories} kcal | {item.protein}g P | {item.carbs}g C | {item.fat}g F
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.deleteButton}
+                  onPress={() => removeConsumable(item.id)}
+                >
+                  <Text style={styles.deleteText}>Purge</Text>
+                </Pressable>
+              </View>
+            ))
+          )}
+
+          {/* Calendar Section */}
+          <View style={styles.calendarContainer}>
+            <Calendar
+              current={selectedDate}
+              onDayPress={(day) => setSelectedDate(day.dateString)}
+              markedDates={{
+                [selectedDate]: { selected: true, selectedColor: Colors.dark.neonCyan },
+              }}
+              theme={{
+                backgroundColor: Colors.dark.background,
+                calendarBackground: Colors.dark.backgroundElement,
+                textSectionTitleColor: Colors.dark.textSecondary,
+                selectedDayBackgroundColor: Colors.dark.neonCyan,
+                selectedDayTextColor: Colors.dark.background,
+                todayTextColor: Colors.dark.neonGreen,
+                dayTextColor: Colors.dark.text,
+                textDisabledColor: Colors.dark.border,
+                arrowColor: Colors.dark.neonCyan,
+                monthTextColor: Colors.dark.text,
+              }}
+              style={styles.calendar}
+            />
+          </View>
+        </ScrollView>
 
         {/* Manifest FAB */}
         <View style={styles.fabContainer}>
@@ -199,43 +270,56 @@ export default function FuelCore() {
           animationType="slide"
           onRequestClose={() => setModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView 
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
             <View style={styles.modalContainer}>
               <Text style={styles.modalHeader}>MANIFEST NEW FUEL</Text>
+              
+              <Text style={styles.inputLabel}>Item Designation</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Item Designation (e.g. Chicken & Rice)"
+                placeholder="e.g. Chicken & Rice"
                 placeholderTextColor={Colors.dark.textSecondary}
                 value={itemName}
                 onChangeText={setItemName}
               />
+              
+              <Text style={styles.inputLabel}>Fuel Mass (kcal)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Fuel Mass (kcal)"
+                placeholder="0"
                 placeholderTextColor={Colors.dark.textSecondary}
                 keyboardType="numeric"
                 value={calories}
                 onChangeText={setCalories}
               />
+              
+              <Text style={styles.inputLabel}>STR Catalyst (Protein g)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="STR Catalyst (Protein g)"
+                placeholder="0"
                 placeholderTextColor={Colors.dark.textSecondary}
                 keyboardType="numeric"
                 value={protein}
                 onChangeText={setProtein}
               />
+              
+              <Text style={styles.inputLabel}>VIT Catalyst (Carbs g)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="VIT Catalyst (Carbs g)"
+                placeholder="0"
                 placeholderTextColor={Colors.dark.textSecondary}
                 keyboardType="numeric"
                 value={carbs}
                 onChangeText={setCarbs}
               />
+              
+              <Text style={styles.inputLabel}>AGI Catalyst (Fat g)</Text>
               <TextInput
                 style={styles.input}
-                placeholder="AGI Catalyst (Fat g)"
+                placeholder="0"
                 placeholderTextColor={Colors.dark.textSecondary}
                 keyboardType="numeric"
                 value={fat}
@@ -257,7 +341,79 @@ export default function FuelCore() {
                 />
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Targets Modal */}
+        <Modal
+          visible={targetsModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setTargetsModalVisible(false)}
+        >
+          <KeyboardAvoidingView 
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.modalContainer}>
+              <Text style={[styles.modalHeader, { color: Colors.dark.neonCyan }]}>EDIT TARGETS</Text>
+              
+              <Text style={styles.inputLabel}>Target Calories (kcal)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={Colors.dark.textSecondary}
+                keyboardType="numeric"
+                value={targetCalories}
+                onChangeText={setTargetCalories}
+              />
+              
+              <Text style={styles.inputLabel}>Target Protein (g)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={Colors.dark.textSecondary}
+                keyboardType="numeric"
+                value={targetProtein}
+                onChangeText={setTargetProtein}
+              />
+              
+              <Text style={styles.inputLabel}>Target Carbs (g)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={Colors.dark.textSecondary}
+                keyboardType="numeric"
+                value={targetCarbs}
+                onChangeText={setTargetCarbs}
+              />
+              
+              <Text style={styles.inputLabel}>Target Fat (g)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0"
+                placeholderTextColor={Colors.dark.textSecondary}
+                keyboardType="numeric"
+                value={targetFat}
+                onChangeText={setTargetFat}
+              />
+              
+              <View style={styles.modalActions}>
+                <NeonButton
+                  title="CANCEL"
+                  onPress={() => setTargetsModalVisible(false)}
+                  color={Colors.dark.textSecondary}
+                  style={styles.modalButton}
+                />
+                <NeonButton
+                  title="UPDATE"
+                  onPress={handleUpdateTargets}
+                  color={Colors.dark.neonCyan}
+                  style={styles.modalButton}
+                />
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     </SafeAreaView>
@@ -272,6 +428,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
+  },
+  calendarContainer: {
+    marginTop: 24,
+    marginBottom: 16,
+  },
+  calendar: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    overflow: 'hidden',
+  },
+  scrollContent: {
+    paddingBottom: 100, // Space for FAB
   },
   headerTitle: {
     color: Colors.dark.text,
@@ -422,6 +591,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     fontSize: 16,
+  },
+  inputLabel: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+    marginBottom: 4,
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   modalActions: {
     flexDirection: 'row',
