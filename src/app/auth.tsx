@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TextInput, Alert, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TextInput, Alert, ScrollView, Pressable, Modal, FlatList } from 'react-native';
+
+const MONTHS = [
+  { label: 'January', value: '01' },
+  { label: 'February', value: '02' },
+  { label: 'March', value: '03' },
+  { label: 'April', value: '04' },
+  { label: 'May', value: '05' },
+  { label: 'June', value: '06' },
+  { label: 'July', value: '07' },
+  { label: 'August', value: '08' },
+  { label: 'September', value: '09' },
+  { label: 'October', value: '10' },
+  { label: 'November', value: '11' },
+  { label: 'December', value: '12' },
+];
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/theme';
 import { NeonButton } from '@/components/NeonButton';
@@ -22,6 +37,7 @@ export default function AuthScreen() {
   // Birthdate
   const [birthMonth, setBirthMonth] = useState('');
   const [birthYear, setBirthYear] = useState('');
+  const [monthPickerVisible, setMonthPickerVisible] = useState(false);
   
   // Weight & Height
   const [weight, setWeight] = useState('');
@@ -136,7 +152,9 @@ export default function AuthScreen() {
           username,
           age,
           weight: finalWeight,
+          weight_unit: weightUnit,
           height: finalHeight,
+          height_unit: heightUnit,
         }
       }
     });
@@ -209,15 +227,17 @@ export default function AuthScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Date of Birth</Text>
                 <View style={styles.row}>
-                  <TextInput
-                    style={[styles.input, styles.flexInput]}
-                    placeholder="MM"
-                    placeholderTextColor={Colors.dark.textSecondary}
-                    value={birthMonth}
-                    onChangeText={setBirthMonth}
-                    keyboardType="numeric"
-                    maxLength={2}
-                  />
+                  {/* Month Selector */}
+                  <Pressable
+                    style={[styles.input, styles.flexInput, styles.pickerButton]}
+                    onPress={() => setMonthPickerVisible(true)}
+                  >
+                    <Text style={birthMonth ? styles.pickerText : styles.pickerPlaceholder}>
+                      {birthMonth ? MONTHS.find(m => m.value === birthMonth)?.label : 'Month'}
+                    </Text>
+                    <Text style={styles.pickerChevron}>▾</Text>
+                  </Pressable>
+
                   <TextInput
                     style={[styles.input, styles.flexInput]}
                     placeholder="YYYY"
@@ -229,6 +249,37 @@ export default function AuthScreen() {
                   />
                 </View>
               </View>
+
+              {/* Month Picker Modal */}
+              <Modal
+                visible={monthPickerVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setMonthPickerVisible(false)}
+              >
+                <Pressable style={styles.modalOverlay} onPress={() => setMonthPickerVisible(false)}>
+                  <View style={styles.monthPickerContainer}>
+                    <Text style={styles.monthPickerTitle}>SELECT MONTH</Text>
+                    <FlatList
+                      data={MONTHS}
+                      keyExtractor={(item) => item.value}
+                      renderItem={({ item }) => (
+                        <Pressable
+                          style={[styles.monthOption, birthMonth === item.value && styles.monthOptionSelected]}
+                          onPress={() => {
+                            setBirthMonth(item.value);
+                            setMonthPickerVisible(false);
+                          }}
+                        >
+                          <Text style={[styles.monthOptionText, birthMonth === item.value && styles.monthOptionTextSelected]}>
+                            {item.label}
+                          </Text>
+                        </Pressable>
+                      )}
+                    />
+                  </View>
+                </Pressable>
+              </Modal>
 
               {/* Physical Stats Row */}
               <View style={styles.row}>
@@ -462,5 +513,64 @@ const styles = StyleSheet.create({
   },
   unitTextSelected: {
     color: Colors.dark.text,
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pickerText: {
+    color: Colors.dark.text,
+    fontSize: 16,
+  },
+  pickerPlaceholder: {
+    color: Colors.dark.textSecondary,
+    fontSize: 16,
+  },
+  pickerChevron: {
+    color: Colors.dark.textSecondary,
+    fontSize: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthPickerContainer: {
+    backgroundColor: Colors.dark.backgroundElement,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    width: '80%',
+    maxHeight: 400,
+    overflow: 'hidden',
+  },
+  monthPickerTitle: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+    textAlign: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  monthOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  monthOptionSelected: {
+    backgroundColor: Colors.dark.neonCyan + '20',
+  },
+  monthOptionText: {
+    color: Colors.dark.text,
+    fontSize: 16,
+  },
+  monthOptionTextSelected: {
+    color: Colors.dark.neonCyan,
+    fontWeight: 'bold',
   },
 });
