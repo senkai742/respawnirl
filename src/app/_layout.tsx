@@ -5,6 +5,8 @@ import { useColorScheme } from 'react-native';
 import { PlayerProvider } from '@/context/PlayerContext';
 import { QuestProvider } from '@/context/QuestContext';
 
+import { FuelProvider } from '@/context/FuelContext';
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   
@@ -12,11 +14,13 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <PlayerProvider>
         <QuestProvider>
-          <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="(tabs)" />
-          </Stack>
+          <FuelProvider>
+            <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="(tabs)" />
+            </Stack>
+          </FuelProvider>
         </QuestProvider>
       </PlayerProvider>
     </ThemeProvider>

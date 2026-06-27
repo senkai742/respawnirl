@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { Text } from 'react-native';
 import { Colors } from '@/constants/theme';
 
 export default function TabLayout() {
@@ -26,6 +27,16 @@ export default function TabLayout() {
         name="journal"
         options={{
           title: 'Journal',
+        }}
+      />
+      <Tabs.Screen
+        name="fuel"
+        options={{
+          title: 'Fuel Core',
+          tabBarIcon: ({ color }) => (
+            // Using a simple text icon for the lightning bolt/capsule
+            <Text style={{ color, fontSize: 20 }}>⚡</Text>
+          ),
         }}
       />
     </Tabs>

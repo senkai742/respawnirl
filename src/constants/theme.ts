@@ -9,29 +9,31 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   dark: {
-    background: '#0a0a0f', // Very dark/almost black background
-    backgroundElement: '#14141e',
+    background: '#000000', // Pure Black background
+    backgroundElement: '#0D0D0D', // Card container background
     backgroundSelected: '#1e1e2d',
     text: '#ffffff',
     textSecondary: '#80848e',
     neonCyan: '#00f3ff',
     neonPurple: '#b026ff',
-    neonRed: '#ff003c',
+    neonRed: '#FF1744',
     neonGreen: '#39ff14',
-    border: '#1a1a2e',
+    neonOrange: '#ff7300',
+    border: '#1A1A1A',
   },
   light: {
     // Fallback light mode, though app is meant to be dark
-    background: '#0a0a0f',
-    backgroundElement: '#14141e',
+    background: '#000000',
+    backgroundElement: '#0D0D0D',
     backgroundSelected: '#1e1e2d',
     text: '#ffffff',
     textSecondary: '#80848e',
     neonCyan: '#00f3ff',
     neonPurple: '#b026ff',
-    neonRed: '#ff003c',
+    neonRed: '#FF1744',
     neonGreen: '#39ff14',
-    border: '#1a1a2e',
+    neonOrange: '#ff7300',
+    border: '#1A1A1A',
   },
 } as const;
 
