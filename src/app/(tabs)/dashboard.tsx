@@ -1,3 +1,4 @@
+import { LevelUpModal } from '@/components/LevelUpModal';
 import { NeonButton } from '@/components/NeonButton';
 import { QuestCard } from '@/components/QuestCard';
 import { RoastModal } from '@/components/RoastModal';
@@ -5,21 +6,31 @@ import { StatBar } from '@/components/StatBar';
 import { Colors } from '@/constants/theme';
 import { usePlayer } from '@/context/PlayerContext';
 import { useQuests } from '@/context/QuestContext';
-import React, { useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { getTitleForQuests } from '@/utils/title';
+import React, { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function Dashboard() {
-  const { state: playerState } = usePlayer();
-  const { quests, completeQuest, failQuest, addQuest, updateQuest } = useQuests();
+  const { state: playerState, leveledUp, clearLevelUp, updateTitle } = usePlayer();
+  const { quests, completeQuest, failQuest, resetQuest, addQuest } = useQuests();
+
+  // Update title whenever quests change
+  useEffect(() => {
+    const newTitle = getTitleForQuests(quests);
+    if (newTitle !== playerState.title) {
+      updateTitle(newTitle);
+    }
+  }, [quests, playerState.title, updateTitle]);
   const [roastVisible, setRoastVisible] = useState(false);
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingQuestId, setEditingQuestId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'boss'>('easy');
 
-  const activeQuests = quests.filter((q) => !q.completed && !q.failed);
+  const today = new Date().toISOString().split('T')[0];
+  const activeQuests = quests.filter((q) => !q.logs.find(l => l.logDate === today));
+  const archivedQuests = quests.filter((q) => q.logs.find(l => l.logDate === today));
 
   const handleFail = (id: string) => {
     failQuest(id);
@@ -29,37 +40,19 @@ export default function Dashboard() {
   const handleAddQuest = () => {
     if (!title.trim()) return;
     
-    if (editingQuestId) {
-      updateQuest(editingQuestId, {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        difficulty,
-      });
-    } else {
-      addQuest({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        difficulty,
-      });
-    }
+    addQuest({
+      title: title.trim(),
+      description: description.trim() || undefined,
+      difficulty,
+    });
     
     setTitle('');
     setDescription('');
     setDifficulty('easy');
-    setEditingQuestId(null);
     setModalVisible(false);
   };
 
-  const handleEditQuest = (quest: any) => {
-    setEditingQuestId(quest.id);
-    setTitle(quest.title);
-    setDescription(quest.description || '');
-    setDifficulty(quest.difficulty);
-    setModalVisible(true);
-  };
-
   const handleOpenAddModal = () => {
-    setEditingQuestId(null);
     setTitle('');
     setDescription('');
     setDifficulty('easy');
@@ -96,27 +89,42 @@ export default function Dashboard() {
           />
         </View>
 
-        {/* Quests Section */}
-        <View style={styles.questsSection}>
-          <Text style={styles.sectionTitle}>Active Quests</Text>
-          <FlatList
-            data={activeQuests}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <QuestCard
-                quest={item}
-                onComplete={completeQuest}
-                onFail={handleFail}
-                onEdit={handleEditQuest}
-              />
-            )}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Active Quests Section */}
+          <View style={styles.questsSection}>
+            <Text style={styles.sectionTitle}>Active Quests</Text>
+            {activeQuests.length === 0 ? (
               <Text style={styles.emptyText}>No active quests. Add one to begin!</Text>
-            }
-          />
-        </View>
+            ) : (
+              activeQuests.map((quest) => (
+                <QuestCard
+                  key={quest.id}
+                  quest={quest}
+                  onComplete={completeQuest}
+                  onFail={handleFail}
+                  onReset={resetQuest}
+                />
+              ))
+            )}
+          </View>
+
+          {/* Archived Quests Section */}
+          {archivedQuests.length > 0 && (
+            <View style={styles.archivedSection}>
+              <Text style={[styles.sectionTitle, styles.archivedSectionTitle]}>Completed Archive</Text>
+              {archivedQuests.map((quest) => (
+                <QuestCard
+                  key={quest.id}
+                  quest={quest}
+                  onComplete={completeQuest}
+                  onFail={handleFail}
+                  onReset={resetQuest}
+                />
+              ))}
+            </View>
+          )}
+          <View style={styles.spacer} />
+        </ScrollView>
 
         {/* FAB */}
         <View style={styles.fabContainer}>
@@ -127,9 +135,14 @@ export default function Dashboard() {
           />
         </View>
 
+        <LevelUpModal 
+          visible={leveledUp} 
+          level={playerState.level} 
+          onClose={clearLevelUp} 
+        />
         <RoastModal visible={roastVisible} onClose={() => setRoastVisible(false)} />
 
-        {/* Add/Edit Quest Modal */}
+        {/* Add Quest Modal */}
         <Modal
           visible={modalVisible}
           transparent
@@ -141,7 +154,7 @@ export default function Dashboard() {
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
             <View style={styles.modalContainer}>
-              <Text style={styles.modalHeader}>{editingQuestId ? 'EDIT QUEST' : 'NEW QUEST'}</Text>
+              <Text style={styles.modalHeader}>NEW QUEST</Text>
               
               <Text style={styles.inputLabel}>Title</Text>
               <TextInput
@@ -191,7 +204,7 @@ export default function Dashboard() {
                   style={styles.modalButton}
                 />
                 <NeonButton
-                  title={editingQuestId ? "SAVE" : "CREATE"}
+                  title="CREATE"
                   onPress={handleAddQuest}
                   color={Colors.dark.neonPurple}
                   style={styles.modalButton}
@@ -259,8 +272,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     overflow: 'hidden',
   },
-  questsSection: {
+  scrollView: {
     flex: 1,
+  },
+  questsSection: {
+    marginBottom: 16,
+  },
+  archivedSection: {
+    marginTop: 8,
   },
   sectionTitle: {
     color: Colors.dark.text,
@@ -270,8 +289,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  listContent: {
-    paddingBottom: 100, // Make room for FAB
+  archivedSectionTitle: {
+    fontSize: 18,
+    color: Colors.dark.textSecondary,
+  },
+  spacer: {
+    height: 100, // Make room for FAB
   },
   emptyText: {
     color: Colors.dark.textSecondary,
