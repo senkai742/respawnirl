@@ -8,19 +8,30 @@ import '@/global.css';
 import { Platform } from 'react-native';
 
 export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
   dark: {
+    background: '#0a0a0f', // Very dark/almost black background
+    backgroundElement: '#14141e',
+    backgroundSelected: '#1e1e2d',
     text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    textSecondary: '#80848e',
+    neonCyan: '#00f3ff',
+    neonPurple: '#b026ff',
+    neonRed: '#ff003c',
+    neonGreen: '#39ff14',
+    border: '#1a1a2e',
+  },
+  light: {
+    // Fallback light mode, though app is meant to be dark
+    background: '#0a0a0f',
+    backgroundElement: '#14141e',
+    backgroundSelected: '#1e1e2d',
+    text: '#ffffff',
+    textSecondary: '#80848e',
+    neonCyan: '#00f3ff',
+    neonPurple: '#b026ff',
+    neonRed: '#ff003c',
+    neonGreen: '#39ff14',
+    border: '#1a1a2e',
   },
 } as const;
 
