@@ -1,16 +1,17 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
-import { Quest } from '@/context/QuestContext';
 import { Colors } from '@/constants/theme';
+import { Quest } from '@/context/QuestContext';
+import React, { useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NeonButton } from './NeonButton';
 
 interface QuestCardProps {
   quest: Quest;
   onComplete: (id: string) => void;
   onFail: (id: string) => void;
+  onEdit: (quest: Quest) => void;
 }
 
-export const QuestCard = ({ quest, onComplete, onFail }: QuestCardProps) => {
+export const QuestCard = ({ quest, onComplete, onFail, onEdit }: QuestCardProps) => {
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -32,8 +33,6 @@ export const QuestCard = ({ quest, onComplete, onFail }: QuestCardProps) => {
       ? Colors.dark.neonGreen
       : quest.difficulty === 'medium'
       ? Colors.dark.neonCyan
-      : quest.difficulty === 'hard'
-      ? Colors.dark.neonPurple
       : Colors.dark.neonRed;
 
   if (quest.completed || quest.failed) return null;
@@ -43,11 +42,16 @@ export const QuestCard = ({ quest, onComplete, onFail }: QuestCardProps) => {
       <Pressable onPressIn={handlePressIn} onPressOut={handlePressOut}>
         <View style={styles.header}>
           <Text style={styles.title}>{quest.title}</Text>
+          <Pressable onPress={() => onEdit(quest)} style={styles.editButton}>
+            <Text style={styles.editText}>Edit</Text>
+          </Pressable>
           <Text style={[styles.difficulty, { color: difficultyColor }]}>
             [{quest.difficulty.toUpperCase()}]
           </Text>
         </View>
-        <Text style={styles.description}>{quest.description}</Text>
+        {!!quest.description && (
+          <Text style={styles.description}>{quest.description}</Text>
+        )}
 
         <View style={styles.rewards}>
           <Text style={styles.rewardText}>XP: +{quest.xpReward}</Text>
@@ -100,6 +104,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  editButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: Colors.dark.textSecondary,
+    borderRadius: 4,
+  },
+  editText: {
+    color: Colors.dark.textSecondary,
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   description: {
     color: Colors.dark.textSecondary,

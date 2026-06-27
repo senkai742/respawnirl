@@ -1,22 +1,69 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ScrollView, SafeAreaView } from 'react-native';
+import { NeonButton } from '@/components/NeonButton';
+import { QuestCard } from '@/components/QuestCard';
+import { RoastModal } from '@/components/RoastModal';
+import { StatBar } from '@/components/StatBar';
 import { Colors } from '@/constants/theme';
 import { usePlayer } from '@/context/PlayerContext';
 import { useQuests } from '@/context/QuestContext';
-import { StatBar } from '@/components/StatBar';
-import { QuestCard } from '@/components/QuestCard';
-import { RoastModal } from '@/components/RoastModal';
+import React, { useState } from 'react';
+import { FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function Dashboard() {
   const { state: playerState } = usePlayer();
-  const { quests, completeQuest, failQuest } = useQuests();
+  const { quests, completeQuest, failQuest, addQuest, updateQuest } = useQuests();
   const [roastVisible, setRoastVisible] = useState(false);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [editingQuestId, setEditingQuestId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'boss'>('easy');
 
   const activeQuests = quests.filter((q) => !q.completed && !q.failed);
 
   const handleFail = (id: string) => {
     failQuest(id);
     setRoastVisible(true);
+  };
+
+  const handleAddQuest = () => {
+    if (!title.trim()) return;
+    
+    if (editingQuestId) {
+      updateQuest(editingQuestId, {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        difficulty,
+      });
+    } else {
+      addQuest({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        difficulty,
+      });
+    }
+    
+    setTitle('');
+    setDescription('');
+    setDifficulty('easy');
+    setEditingQuestId(null);
+    setModalVisible(false);
+  };
+
+  const handleEditQuest = (quest: any) => {
+    setEditingQuestId(quest.id);
+    setTitle(quest.title);
+    setDescription(quest.description || '');
+    setDifficulty(quest.difficulty);
+    setModalVisible(true);
+  };
+
+  const handleOpenAddModal = () => {
+    setEditingQuestId(null);
+    setTitle('');
+    setDescription('');
+    setDifficulty('easy');
+    setModalVisible(true);
   };
 
   return (
@@ -60,14 +107,99 @@ export default function Dashboard() {
                 quest={item}
                 onComplete={completeQuest}
                 onFail={handleFail}
+                onEdit={handleEditQuest}
               />
             )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>No active quests. Add one to begin!</Text>
+            }
+          />
+        </View>
+
+        {/* FAB */}
+        <View style={styles.fabContainer}>
+          <NeonButton
+            title="+ ADD QUEST"
+            onPress={handleOpenAddModal}
+            color={Colors.dark.neonPurple}
           />
         </View>
 
         <RoastModal visible={roastVisible} onClose={() => setRoastVisible(false)} />
+
+        {/* Add/Edit Quest Modal */}
+        <Modal
+          visible={modalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <KeyboardAvoidingView 
+            style={styles.modalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <View style={styles.modalContainer}>
+              <Text style={styles.modalHeader}>{editingQuestId ? 'EDIT QUEST' : 'NEW QUEST'}</Text>
+              
+              <Text style={styles.inputLabel}>Title</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Quest Objective"
+                placeholderTextColor={Colors.dark.textSecondary}
+                value={title}
+                onChangeText={setTitle}
+              />
+
+              <Text style={styles.inputLabel}>Description (Optional)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Additional details..."
+                placeholderTextColor={Colors.dark.textSecondary}
+                value={description}
+                onChangeText={setDescription}
+              />
+
+              <Text style={styles.inputLabel}>Difficulty</Text>
+              <View style={styles.difficultyRow}>
+                <Pressable
+                  style={[styles.diffButton, difficulty === 'easy' && { borderColor: Colors.dark.neonGreen, backgroundColor: Colors.dark.neonGreen + '20' }]}
+                  onPress={() => setDifficulty('easy')}
+                >
+                  <Text style={[styles.diffText, difficulty === 'easy' && { color: Colors.dark.neonGreen }]}>EASY</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.diffButton, difficulty === 'medium' && { borderColor: Colors.dark.neonCyan, backgroundColor: Colors.dark.neonCyan + '20' }]}
+                  onPress={() => setDifficulty('medium')}
+                >
+                  <Text style={[styles.diffText, difficulty === 'medium' && { color: Colors.dark.neonCyan }]}>MEDIUM</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.diffButton, difficulty === 'boss' && { borderColor: Colors.dark.neonRed, backgroundColor: Colors.dark.neonRed + '20' }]}
+                  onPress={() => setDifficulty('boss')}
+                >
+                  <Text style={[styles.diffText, difficulty === 'boss' && { color: Colors.dark.neonRed }]}>BOSS</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.modalActions}>
+                <NeonButton
+                  title="CANCEL"
+                  onPress={() => setModalVisible(false)}
+                  color={Colors.dark.textSecondary}
+                  style={styles.modalButton}
+                />
+                <NeonButton
+                  title={editingQuestId ? "SAVE" : "CREATE"}
+                  onPress={handleAddQuest}
+                  color={Colors.dark.neonPurple}
+                  style={styles.modalButton}
+                />
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -139,6 +271,84 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 100, // Make room for FAB
+  },
+  emptyText: {
+    color: Colors.dark.textSecondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    padding: 20,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
+    left: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    backgroundColor: Colors.dark.backgroundElement,
+    borderTopWidth: 2,
+    borderColor: Colors.dark.border,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 24,
+  },
+  modalHeader: {
+    color: Colors.dark.neonPurple,
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 24,
+    letterSpacing: 1,
+  },
+  inputLabel: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+    marginBottom: 4,
+    marginLeft: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  input: {
+    backgroundColor: Colors.dark.background,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    color: Colors.dark.text,
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    fontSize: 16,
+  },
+  difficultyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 24,
+  },
+  diffButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  diffText: {
+    color: Colors.dark.textSecondary,
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 20,
+  },
+  modalButton: {
+    flex: 1,
   },
 });
