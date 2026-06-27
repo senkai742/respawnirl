@@ -8,9 +8,10 @@ interface NeonButtonProps {
   style?: ViewStyle;
   textStyle?: TextStyle;
   color?: string;
+  disabled?: boolean;
 }
 
-export const NeonButton = ({ title, onPress, style, textStyle, color = Colors.dark.neonCyan }: NeonButtonProps) => {
+export const NeonButton = ({ title, onPress, style, textStyle, color = Colors.dark.neonCyan, disabled = false }: NeonButtonProps) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -30,13 +31,15 @@ export const NeonButton = ({ title, onPress, style, textStyle, color = Colors.da
   return (
     <Animated.View style={[{ transform: [{ scale: scaleValue }] }, style]}>
       <Pressable
+        disabled={disabled}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
         style={({ pressed }) => [
           styles.button,
           { borderColor: color },
-          pressed && { backgroundColor: `${color}20` },
+          pressed && !disabled && { backgroundColor: `${color}20` },
+          disabled && { opacity: 0.5 },
         ]}
       >
         <Text style={[styles.text, { color, textShadowColor: color }, textStyle]}>

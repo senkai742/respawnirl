@@ -42,7 +42,7 @@ export default function Onboarding() {
       fadeAnim.setValue(0);
       setCurrentPage((prev) => prev + 1);
     } else {
-      router.replace('/(tabs)/dashboard');
+      router.replace('/auth');
     }
   };
 

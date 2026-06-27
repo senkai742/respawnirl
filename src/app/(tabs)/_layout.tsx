@@ -21,12 +21,9 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-        }}
-      />
-      <Tabs.Screen
-        name="journal"
-        options={{
-          title: 'Journal',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 20 }}>📊</Text>
+          ),
         }}
       />
       <Tabs.Screen
@@ -34,9 +31,24 @@ export default function TabLayout() {
         options={{
           title: 'Fuel Core',
           tabBarIcon: ({ color }) => (
-            // Using a simple text icon for the lightning bolt/capsule
             <Text style={{ color, fontSize: 20 }}>⚡</Text>
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => (
+            <Text style={{ color, fontSize: 20 }}>👤</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="journal"
+        options={{
+          title: 'Journal',
+          href: null, // Hiding journal from tab bar for now to keep Fuel centered
         }}
       />
     </Tabs>
