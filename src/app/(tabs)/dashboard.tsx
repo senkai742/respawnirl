@@ -1,18 +1,18 @@
 import { LevelUpModal } from '@/components/LevelUpModal';
 import { NeonButton } from '@/components/NeonButton';
-import { QuestCard } from '@/components/QuestCard';
+import QuestCard from '@/components/QuestCard';
 import { RoastModal } from '@/components/RoastModal';
 import { StatBar } from '@/components/StatBar';
 import { Colors } from '@/constants/theme';
 import { usePlayer } from '@/context/PlayerContext';
-import { useQuests } from '@/context/QuestContext';
+import { QuestUnit, useQuests } from '@/context/QuestContext';
 import { getTitleForQuests } from '@/utils/title';
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 export default function Dashboard() {
   const { state: playerState, leveledUp, clearLevelUp, updateTitle } = usePlayer();
-  const { quests, completeQuest, failQuest, resetQuest, addQuest } = useQuests();
+  const { quests, addQuest, resetTodayLog, getTodayLog } = useQuests();
 
   // Update title whenever quests change
   useEffect(() => {
@@ -21,21 +21,24 @@ export default function Dashboard() {
       updateTitle(newTitle);
     }
   }, [quests, playerState.title, updateTitle]);
-  const [roastVisible, setRoastVisible] = useState(false);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'boss'>('easy');
+  const [tier, setTier] = useState<'Easy' | 'Medium' | 'Boss'>('Easy');
+  const [unitType, setUnitType] = useState<QuestUnit>('binary');
+  const [defaultTarget, setDefaultTarget] = useState('1');
+  const [defaultOperator, setDefaultOperator] = useState<'<' | '<=' | '=' | '>=' | '>'>('>=');
 
   const today = new Date().toISOString().split('T')[0];
-  const activeQuests = quests.filter((q) => !q.logs.find(l => l.logDate === today));
-  const archivedQuests = quests.filter((q) => q.logs.find(l => l.logDate === today));
-
-  const handleFail = (id: string) => {
-    failQuest(id);
-    setRoastVisible(true);
-  };
+  const activeQuests = quests.filter((q) => {
+    const log = getTodayLog(q.id);
+    return !log || log.status === 'active';
+  });
+  const archivedQuests = quests.filter((q) => {
+    const log = getTodayLog(q.id);
+    return log && log.status !== 'active';
+  });
 
   const handleAddQuest = () => {
     if (!title.trim()) return;
@@ -43,19 +46,28 @@ export default function Dashboard() {
     addQuest({
       title: title.trim(),
       description: description.trim() || undefined,
-      difficulty,
+      tier,
+      defaultUnitType: unitType,
+      defaultTarget: parseInt(defaultTarget) || 1,
+      defaultOperator: defaultOperator as '>=' | '<=',
     });
     
     setTitle('');
     setDescription('');
-    setDifficulty('easy');
+    setTier('Easy');
+    setUnitType('binary');
+    setDefaultTarget('1');
+    setDefaultOperator('>=');
     setModalVisible(false);
   };
 
   const handleOpenAddModal = () => {
     setTitle('');
     setDescription('');
-    setDifficulty('easy');
+    setTier('Easy');
+    setUnitType('binary');
+    setDefaultTarget('1');
+    setDefaultOperator('>=');
     setModalVisible(true);
   };
 
@@ -100,9 +112,6 @@ export default function Dashboard() {
                 <QuestCard
                   key={quest.id}
                   quest={quest}
-                  onComplete={completeQuest}
-                  onFail={handleFail}
-                  onReset={resetQuest}
                 />
               ))
             )}
@@ -116,9 +125,6 @@ export default function Dashboard() {
                 <QuestCard
                   key={quest.id}
                   quest={quest}
-                  onComplete={completeQuest}
-                  onFail={handleFail}
-                  onReset={resetQuest}
                 />
               ))}
             </View>
@@ -140,7 +146,7 @@ export default function Dashboard() {
           level={playerState.level} 
           onClose={clearLevelUp} 
         />
-        <RoastModal visible={roastVisible} onClose={() => setRoastVisible(false)} />
+        <RoastModal visible={false} onClose={() => {}} />
 
         {/* Add Quest Modal */}
         <Modal
@@ -174,27 +180,94 @@ export default function Dashboard() {
                 onChangeText={setDescription}
               />
 
-              <Text style={styles.inputLabel}>Difficulty</Text>
-              <View style={styles.difficultyRow}>
-                <Pressable
-                  style={[styles.diffButton, difficulty === 'easy' && { borderColor: Colors.dark.neonGreen, backgroundColor: Colors.dark.neonGreen + '20' }]}
-                  onPress={() => setDifficulty('easy')}
-                >
-                  <Text style={[styles.diffText, difficulty === 'easy' && { color: Colors.dark.neonGreen }]}>EASY</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.diffButton, difficulty === 'medium' && { borderColor: Colors.dark.neonCyan, backgroundColor: Colors.dark.neonCyan + '20' }]}
-                  onPress={() => setDifficulty('medium')}
-                >
-                  <Text style={[styles.diffText, difficulty === 'medium' && { color: Colors.dark.neonCyan }]}>MEDIUM</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.diffButton, difficulty === 'boss' && { borderColor: Colors.dark.neonRed, backgroundColor: Colors.dark.neonRed + '20' }]}
-                  onPress={() => setDifficulty('boss')}
-                >
-                  <Text style={[styles.diffText, difficulty === 'boss' && { color: Colors.dark.neonRed }]}>BOSS</Text>
-                </Pressable>
+              <Text style={styles.inputLabel}>Tier</Text>
+              <View style={styles.optionRow}>
+                {['Easy', 'Medium', 'Boss'].map((t) => (
+                  <Pressable
+                    key={t}
+                    style={[
+                      styles.optionButton, 
+                      tier === t && { 
+                        borderColor: t === 'Easy' ? Colors.dark.neonGreen : t === 'Medium' ? Colors.dark.neonPurple : Colors.dark.neonRed, 
+                        backgroundColor: (t === 'Easy' ? Colors.dark.neonGreen : t === 'Medium' ? Colors.dark.neonPurple : Colors.dark.neonRed) + '20' 
+                      }]}
+                    onPress={() => setTier(t as any)}
+                  >
+                    <Text style={[
+                      styles.optionText, 
+                      tier === t && { 
+                        color: t === 'Easy' ? Colors.dark.neonGreen : t === 'Medium' ? Colors.dark.neonPurple : Colors.dark.neonRed 
+                      }
+                    ]}>{t.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
               </View>
+
+              <Text style={styles.inputLabel}>Type</Text>
+              <View style={styles.optionRow}>
+                {[
+                  { value: 'binary', label: 'Binary' },
+                  { value: 'count', label: 'Count' },
+                  { value: 'time_min', label: 'Time (s)' },
+                  { value: 'time_hr', label: 'Time (m)' },
+                  { value: 'clock_time', label: 'Clock' },
+                ].map((u) => (
+                  <Pressable
+                    key={u.value}
+                    style={[
+                      styles.optionButton, 
+                      unitType === u.value && { 
+                        borderColor: Colors.dark.neonCyan, 
+                        backgroundColor: Colors.dark.neonCyan + '20' 
+                      }]}
+                    onPress={() => setUnitType(u.value as any)}
+                  >
+                    <Text style={[
+                      styles.optionText, 
+                      unitType === u.value && { 
+                        color: Colors.dark.neonCyan 
+                      }
+                    ]}>{u.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {(unitType !== 'binary') && (
+                <>
+                  <Text style={styles.inputLabel}>Target</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    placeholder="1"
+                    placeholderTextColor={Colors.dark.textSecondary}
+                    value={defaultTarget}
+                    onChangeText={setDefaultTarget}
+                  />
+
+                  <Text style={styles.inputLabel}>Condition</Text>
+                  <View style={styles.optionRow}>
+                    {['>=', '<='].map((o) => (
+                      <Pressable
+                        key={o}
+                        style={[
+                          styles.optionButton, 
+                          defaultOperator === o && { 
+                            borderColor: Colors.dark.neonPurple, 
+                            backgroundColor: Colors.dark.neonPurple + '20' 
+                          }]}
+                        onPress={() => setDefaultOperator(o as any)}
+                      >
+                        <Text style={[
+                          styles.optionText, 
+                          defaultOperator === o && { 
+                            color: Colors.dark.neonPurple 
+                          }
+                        ]}>{o}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
 
               <View style={styles.modalActions}>
                 <NeonButton
@@ -294,82 +367,89 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
   },
   spacer: {
-    height: 100, // Make room for FAB
+    height: 100,
   },
   emptyText: {
     color: Colors.dark.textSecondary,
-    fontStyle: 'italic',
     textAlign: 'center',
-    padding: 20,
+    fontStyle: 'italic',
+    fontSize: 16,
+    marginTop: 16,
   },
   fabContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 16,
+    bottom: 16,
     left: 16,
+    right: 16,
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
   },
   modalContainer: {
+    width: '100%',
+    maxWidth: 400,
     backgroundColor: Colors.dark.backgroundElement,
-    borderTopWidth: 2,
-    borderColor: Colors.dark.border,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
     padding: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    shadowColor: Colors.dark.neonCyan,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
   },
   modalHeader: {
     color: Colors.dark.neonPurple,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 24,
-    letterSpacing: 1,
+    marginBottom: 20,
+    textShadowColor: Colors.dark.neonPurple,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 10,
   },
   inputLabel: {
-    color: Colors.dark.textSecondary,
-    fontSize: 12,
-    marginBottom: 4,
-    marginLeft: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    color: Colors.dark.text,
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    marginTop: 12,
   },
   input: {
     backgroundColor: Colors.dark.background,
     borderWidth: 1,
     borderColor: Colors.dark.border,
-    color: Colors.dark.text,
-    padding: 12,
     borderRadius: 8,
-    marginBottom: 16,
+    padding: 12,
+    color: Colors.dark.text,
     fontSize: 16,
   },
-  difficultyRow: {
+  optionRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 24,
+    flexWrap: 'wrap',
   },
-  diffButton: {
+  optionButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderWidth: 1,
+    minWidth: 100,
+    borderWidth: 2,
     borderColor: Colors.dark.border,
     borderRadius: 8,
+    paddingVertical: 10,
     alignItems: 'center',
   },
-  diffText: {
+  optionText: {
     color: Colors.dark.textSecondary,
     fontWeight: 'bold',
-    fontSize: 12,
   },
   modalActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 16,
-    marginBottom: 20,
+    gap: 12,
+    marginTop: 24,
   },
   modalButton: {
     flex: 1,

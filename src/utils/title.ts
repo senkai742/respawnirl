@@ -1,13 +1,13 @@
 export type Title = 
-  | 'Main Character' 
-  | 'Life Hacker' 
-  | 'Procrastination King' 
-  | 'Tutorial NPC'
-  | 'Novice Adventurer';
+  | "Main Character" 
+  | "Life Hacker" 
+  | "Novice Adventurer" 
+  | "Procrastination King" 
+  | "Tutorial NPC";
 
 export interface QuestLogForTitle {
   logDate: string;
-  status: 'completed' | 'failed';
+  status: 'active' | 'completed' | 'failed' | 'skip';
 }
 
 export interface QuestForTitle {
@@ -20,23 +20,30 @@ export const getTitleForQuests = (quests: QuestForTitle[]): Title => {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
-  // Collect all logs from last 7 days across all quests
+  // Collect all logs from last 7 days across all quests, excluding skips
   const recentLogs = quests.flatMap(q => 
-    q.logs.filter(log => log.logDate >= sevenDaysAgoStr)
+    q.logs.filter(l => l.logDate >= sevenDaysAgoStr && l.status !== 'skip')
   );
 
   const totalQuests = recentLogs.length;
-  const successCount = recentLogs.filter(log => log.status === 'completed').length;
-  
-  // Calculate ratio
-  const successRatio = totalQuests > 0 ? (successCount / totalQuests) * 100 : 0;
+  const successCount = recentLogs.filter(l => l.status === 'completed').length;
 
-  // Safety check: At least 3 quests in 7 days for high-tier titles
-  const hasEnoughQuests = totalQuests >= 3;
+  // Safety check: At least 3 quests to qualify for high-tier titles
+  if (totalQuests < 3) {
+    return "Novice Adventurer";
+  }
 
-  if (hasEnoughQuests && successRatio >= 85) return 'Main Character';
-  if (hasEnoughQuests && successRatio >= 60) return 'Life Hacker';
-  if (successRatio >= 35) return 'Novice Adventurer';
-  if (successRatio >= 15) return 'Procrastination King';
-  return 'Tutorial NPC';
+  const successRate = successCount / totalQuests;
+
+  if (successRate >= 0.85) {
+    return "Main Character";
+  } else if (successRate >= 0.60) {
+    return "Life Hacker";
+  } else if (successRate >= 0.35) {
+    return "Novice Adventurer";
+  } else if (successRate >= 0.15) {
+    return "Procrastination King";
+  } else {
+    return "Tutorial NPC";
+  }
 };

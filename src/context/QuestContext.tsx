@@ -2,358 +2,338 @@ import { supabase } from '@/lib/supabase';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { usePlayer } from './PlayerContext';
 
+export type QuestUnit = 'binary' | 'count' | 'time_min' | 'time_hr' | 'clock_time';
+
 export interface QuestLog {
   id: string;
   questId: string;
-  logDate: string; // YYYY-MM-DD
-  status: 'completed' | 'failed';
+  logDate: string;
+  status: 'active' | 'completed' | 'failed' | 'skip';
+  metric: {
+    current: number;
+    target: number;
+    operator: '>=' | '<=';
+  };
+  unitType: QuestUnit;
 }
 
 export interface Quest {
   id: string;
   title: string;
   description?: string;
-  xpReward: number;
-  coinReward: number;
-  difficulty: 'easy' | 'medium' | 'boss';
+  tier: 'Easy' | 'Medium' | 'Boss';
   logs: QuestLog[];
+  defaultUnitType: QuestUnit;
+  defaultTarget: number;
+  defaultOperator: '>=' | '<=';
 }
 
 interface QuestContextProps {
   quests: Quest[];
-  logQuest: (questId: string, logDate: string, status: 'completed' | 'failed') => Promise<void>;
-  resetQuestLog: (questId: string, logDate: string) => Promise<void>;
-  addQuest: (quest: { title: string; description?: string; difficulty: 'easy' | 'medium' | 'boss' }) => void;
-  updateQuest: (id: string, updates: { title: string; description?: string; difficulty: 'easy' | 'medium' | 'boss' }) => void;
+  addQuest: (quest: { 
+    title: string; 
+    description?: string; 
+    tier: 'Easy' | 'Medium' | 'Boss';
+    defaultUnitType: QuestUnit;
+    defaultTarget: number;
+    defaultOperator: '>=' | '<=';
+  }) => void;
+  updateQuest: (id: string, updates: Partial<Omit<Quest, 'id' | 'logs'>>) => void;
+  getTodayLog: (questId: string) => QuestLog | undefined;
+  getLogForDate: (questId: string, date: string) => QuestLog | undefined;
+  updateLog: (questId: string, date: string, update: Partial<Pick<QuestLog, 'status' | 'metric'>>) => void;
+  logQuest: (questId: string, date: string, status: 'completed' | 'failed' | 'skip') => void;
+  resetTodayLog: (questId: string) => void;
+  resetLog: (questId: string, date: string) => void;
 }
 
 const QuestContext = createContext<QuestContextProps | undefined>(undefined);
 
+const getTodayStr = () => new Date().toISOString().split('T')[0];
+
+const evaluateStatus = (current: number, target: number, operator: '>=' | '<='): boolean => {
+  if (operator === '>=') return current >= target;
+  return current <= target;
+};
+
+const getReward = (tier: 'Easy' | 'Medium' | 'Boss') => {
+  switch (tier) {
+    case 'Easy': return { xp: 10, coins: 5 };
+    case 'Medium': return { xp: 30, coins: 15 };
+    case 'Boss': return { xp: 50, coins: 25 };
+  }
+};
+
+const getDamage = (tier: 'Easy' | 'Medium' | 'Boss') => {
+  switch (tier) {
+    case 'Easy': return 5;
+    case 'Medium': return 15;
+    case 'Boss': return 40;
+  }
+};
+
 export const QuestProvider = ({ children }: { children: ReactNode }) => {
   const [quests, setQuests] = useState<Quest[]>([]);
-  const {
-    gainXp,
-    loseXp,
-    earnCoins,
-    loseCoins,
-    takeDamage,
-    healHp,
-    incrementStreak,
-    resetStreak,
-    decrementStreak,
+  const { 
+    gainXp, loseXp, earnCoins, loseCoins, takeDamage, healHp, 
+    incrementStreak, resetStreak, decrementStreak 
   } = usePlayer();
 
   useEffect(() => {
-    fetchQuestsAndLogs();
+    const fetchData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const [questsResult, logsResult] = await Promise.all([
+        supabase.from('quests').select('*').eq('user_id', user.id),
+        supabase.from('quest_logs').select('*').eq('user_id', user.id)
+      ]);
+
+      if (questsResult.data) {
+        const parsedQuests: Quest[] = questsResult.data.map(q => ({
+          id: q.id,
+          title: q.title,
+          description: q.description || undefined,
+          tier: (q.tier as 'Easy' | 'Medium' | 'Boss') || 'Easy',
+          defaultUnitType: (q.default_unit_type as QuestUnit) || 'binary',
+          defaultTarget: q.default_target ?? 1,
+          defaultOperator: (q.default_operator as '>=' | '<=') || '>=',
+          logs: logsResult.data?.filter(l => l.quest_id === q.id).map(l => ({
+            id: l.id,
+            questId: l.quest_id,
+            logDate: l.log_date,
+            status: l.status as 'active' | 'completed' | 'failed' | 'skip',
+            unitType: l.unit_type as QuestUnit,
+            metric: {
+              current: l.metric_current,
+              target: l.metric_target,
+              operator: l.metric_operator as '>=' | '<='
+            }
+          })) || []
+        }));
+        setQuests(parsedQuests);
+      }
+    };
+    fetchData();
   }, []);
 
-  const fetchQuestsAndLogs = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 1. Fetch all quests
-    const { data: questsData, error: questsError } = await supabase
-      .from('quests')
-      .select('*')
-      .eq('user_id', user.id);
-
-    if (questsError) {
-      console.error('Error fetching quests:', questsError);
-      return;
-    }
-
-    // 2. Fetch all logs for these quests
-    const { data: logsData, error: logsError } = await supabase
-      .from('quest_logs')
-      .select('*')
-      .eq('user_id', user.id);
-
-    if (logsError) {
-      console.error('Error fetching quest logs:', logsError);
-      // Still proceed with quests, just no logs
-      const questsWithEmptyLogs = (questsData || []).map(q => ({
-        id: q.id,
-        title: q.title,
-        description: q.description || undefined,
-        difficulty: q.difficulty as 'easy' | 'medium' | 'boss',
-        xpReward: q.xp_reward,
-        coinReward: q.coin_reward,
-        logs: [],
-      }));
-      setQuests(questsWithEmptyLogs);
-      return;
-    }
-
-    // 3. Combine quests and logs
-    const questsWithLogs = (questsData || []).map(q => {
-      const questLogs = (logsData || [])
-        .filter(l => l.quest_id === q.id)
-        .map(l => ({
-          id: l.id,
-          questId: l.quest_id,
-          logDate: l.log_date,
-          status: l.status as 'completed' | 'failed',
-        }));
-      
-      return {
-        id: q.id,
-        title: q.title,
-        description: q.description || undefined,
-        difficulty: q.difficulty as 'easy' | 'medium' | 'boss',
-        xpReward: q.xp_reward,
-        coinReward: q.coin_reward,
-        logs: questLogs,
-      };
-    });
-    setQuests(questsWithLogs);
+  const getTodayLog = (questId: string) => {
+    const quest = quests.find(q => q.id === questId);
+    return quest?.logs.find(l => l.logDate === getTodayStr());
   };
 
-  // Helper to get today's date as YYYY-MM-DD
-  const getTodayDate = () => {
-    const now = new Date();
-    return now.toISOString().split('T')[0];
+  const getLogForDate = (questId: string, date: string) => {
+    const quest = quests.find(q => q.id === questId);
+    return quest?.logs.find(l => l.logDate === date);
   };
 
-  const logQuest = async (
-    questId: string,
-    logDate: string,
-    status: 'completed' | 'failed'
-  ) => {
+  const initializeLog = async (questId: string, date: string) => {
     const quest = quests.find(q => q.id === questId);
     if (!quest) return;
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Check if there's an existing log for this date
-    const existingLog = quest.logs.find(l => l.logDate === logDate);
-
-    // Optimistic UI update first
-    setQuests(prev =>
-      prev.map(q => {
-        if (q.id !== questId) return q;
-
-        let updatedLogs;
-        if (existingLog) {
-          // Replace existing log
-          updatedLogs = q.logs.map(l =>
-            l.logDate === logDate ? { ...l, status } : l
-          );
-        } else {
-          // Add new log
-          updatedLogs = [...q.logs, {
-            id: `temp-${Date.now()}`,
-            questId,
-            logDate,
-            status,
-          }];
-        }
-
-        return { ...q, logs: updatedLogs };
-      })
-    );
-
-    // Update player stats based on status and existing log
-    if (existingLog) {
-      // Revert previous status first
-      if (existingLog.status === 'completed') {
-        loseXp(quest.xpReward);
-        loseCoins(quest.coinReward);
-        decrementStreak();
-      } else {
-        let damage = 5;
-        if (quest.difficulty === 'medium') damage = 15;
-        if (quest.difficulty === 'boss') damage = 40;
-        healHp(damage);
+    const newLog: QuestLog = {
+      id: `temp-${Date.now()}`,
+      questId,
+      logDate: date,
+      status: 'active',
+      unitType: quest.defaultUnitType,
+      metric: {
+        current: 0,
+        target: quest.defaultTarget,
+        operator: quest.defaultOperator
       }
-    }
+    };
 
-    // Apply new status
-    if (status === 'completed') {
-      gainXp(quest.xpReward);
-      earnCoins(quest.coinReward);
-      incrementStreak();
-    } else {
-      let damage = 5;
-      if (quest.difficulty === 'medium') damage = 15;
-      if (quest.difficulty === 'boss') damage = 40;
-      takeDamage(damage);
-      resetStreak();
-    }
+    setQuests(prev => prev.map(q => 
+      q.id === questId ? { ...q, logs: [...q.logs, newLog] } : q
+    ));
 
-    // Update database using upsert
-    if (existingLog) {
-      await supabase
-        .from('quest_logs')
-        .update({ status })
-        .eq('quest_id', questId)
-        .eq('user_id', user.id)
-        .eq('log_date', logDate);
-    } else {
-      const { data: newLog, error } = await supabase
-        .from('quest_logs')
-        .insert({
-          quest_id: questId,
-          user_id: user.id,
-          log_date: logDate,
-          status,
-        })
-        .select()
-        .single();
-      
-      if (!error && newLog) {
-        // Update optimistic UI temp ID with real one
-        setQuests(prev =>
-          prev.map(q =>
-            q.id !== questId ? q : {
-              ...q,
-              logs: q.logs.map(l =>
-                l.id.startsWith('temp-') && l.logDate === logDate
-                  ? { ...l, id: newLog.id }
-                  : l
-              ),
-            }
-          )
-        );
-      }
-    }
-  };
+    const { data: insertedLog } = await supabase.from('quest_logs').insert({
+      user_id: user.id,
+      quest_id: questId,
+      log_date: date,
+      status: 'active',
+      unit_type: quest.defaultUnitType,
+      metric_current: 0,
+      metric_target: quest.defaultTarget,
+      metric_operator: quest.defaultOperator
+    }).select().single();
 
-  const resetQuestLog = async (questId: string, logDate: string) => {
-    const quest = quests.find(q => q.id === questId);
-    if (!quest) return;
-
-    const existingLog = quest.logs.find(l => l.logDate === logDate);
-    if (!existingLog) return;
-
-    // Optimistic UI
-    setQuests(prev =>
-      prev.map(q =>
-        q.id !== questId ? q : {
+    if (insertedLog) {
+      setQuests(prev => prev.map(q => 
+        q.id === questId ? {
           ...q,
-          logs: q.logs.filter(l => l.logDate !== logDate),
-        }
-      )
-    );
-
-    // Revert player stats
-    if (existingLog.status === 'completed') {
-      loseXp(quest.xpReward);
-      loseCoins(quest.coinReward);
-      decrementStreak();
-    } else {
-      let damage = 5;
-      if (quest.difficulty === 'medium') damage = 15;
-      if (quest.difficulty === 'boss') damage = 40;
-      healHp(damage);
-    }
-
-    // Delete log from DB
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase
-        .from('quest_logs')
-        .delete()
-        .eq('quest_id', questId)
-        .eq('user_id', user.id)
-        .eq('log_date', logDate);
+          logs: q.logs.map(l => l.id === newLog.id ? { ...l, id: insertedLog.id } : l)
+        } : q
+      ));
     }
   };
 
-  const addQuest = async (questData: { title: string; description?: string; difficulty: 'easy' | 'medium' | 'boss' }) => {
-    let xpReward = 10;
-    let coinReward = 5;
-    
-    if (questData.difficulty === 'medium') {
-      xpReward = 30;
-      coinReward = 15;
-    } else if (questData.difficulty === 'boss') {
-      xpReward = 50;
-      coinReward = 25;
+  const updateLog = async (questId: string, date: string, update: Partial<Pick<QuestLog, 'status' | 'metric'>>) => {
+    const quest = quests.find(q => q.id === questId);
+    if (!quest) return;
+
+    let log = getLogForDate(questId, date);
+    if (!log) {
+      await initializeLog(questId, date);
+      log = getLogForDate(questId, date);
+      if (!log) return;
     }
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const oldStatus = log.status;
+    let newStatus = update.status || oldStatus;
+
+    if (update.metric && !update.status) {
+      const newMetric = { ...log.metric, ...update.metric };
+      if (evaluateStatus(newMetric.current, newMetric.target, newMetric.operator)) {
+        newStatus = 'completed';
+      }
+    }
+
+    setQuests(prev => prev.map(q => 
+      q.id === questId ? {
+        ...q,
+        logs: q.logs.map(l => 
+          l.logDate === date ? { ...l, ...update, status: newStatus } : l
+        )
+      } : q
+    ));
+
+    if (oldStatus !== newStatus) {
+      if (oldStatus === 'completed') {
+        const reward = getReward(quest.tier);
+        loseXp(reward.xp);
+        loseCoins(reward.coins);
+        decrementStreak();
+      } else if (oldStatus === 'failed') {
+        healHp(getDamage(quest.tier));
+      }
+
+      if (newStatus === 'completed') {
+        const reward = getReward(quest.tier);
+        gainXp(reward.xp);
+        earnCoins(reward.coins);
+        incrementStreak();
+      } else if (newStatus === 'failed') {
+        takeDamage(getDamage(quest.tier));
+        resetStreak();
+      }
+    }
+
+    await supabase.from('quest_logs').update({
+      ...(update.status && { status: update.status }),
+      ...(update.metric && {
+        metric_current: update.metric.current,
+        metric_target: update.metric.target,
+        metric_operator: update.metric.operator
+      }),
+      status: newStatus
+    }).eq('quest_id', questId).eq('user_id', user.id).eq('log_date', date);
+  };
+
+  const logQuest = (questId: string, date: string, status: 'completed' | 'failed' | 'skip') => {
+    updateLog(questId, date, { status });
+  };
+
+  const resetLog = async (questId: string, date: string) => {
+    const quest = quests.find(q => q.id === questId);
+    if (!quest) return;
+    const log = getLogForDate(questId, date);
+    if (!log) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (log.status === 'completed') {
+      const reward = getReward(quest.tier);
+      loseXp(reward.xp);
+      loseCoins(reward.coins);
+      decrementStreak();
+    } else if (log.status === 'failed') {
+      healHp(getDamage(quest.tier));
+    }
+
+    setQuests(prev => prev.map(q => 
+      q.id === questId ? {
+        ...q,
+        logs: q.logs.filter(l => l.logDate !== date)
+      } : q
+    ));
+
+    await supabase.from('quest_logs').delete().eq('quest_id', questId).eq('user_id', user.id).eq('log_date', date);
+  };
+
+  const resetTodayLog = (questId: string) => {
+    resetLog(questId, getTodayStr());
+  };
+
+  const addQuest = async (questData: { 
+    title: string; 
+    description?: string; 
+    tier: 'Easy' | 'Medium' | 'Boss';
+    defaultUnitType: QuestUnit;
+    defaultTarget: number;
+    defaultOperator: '>=' | '<=';
+  }) => {
     const tempId = Date.now().toString();
     const newQuest: Quest = {
       ...questData,
       id: tempId,
-      xpReward,
-      coinReward,
-      logs: [],
+      logs: []
     };
-    
-    // Optimistic UI
-    setQuests((prev) => [...prev, newQuest]);
+    setQuests(prev => [...prev, newQuest]);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Insert to DB
-    const { data, error } = await supabase
-      .from('quests')
-      .insert({
-        user_id: user.id,
-        title: questData.title,
-        description: questData.description || null,
-        difficulty: questData.difficulty,
-        status: 'active', // keep for compatibility, though we don't use it much now
-        xp_reward: xpReward,
-        coin_reward: coinReward,
-      })
-      .select()
-      .single();
+    const { data: inserted } = await supabase.from('quests').insert({
+      user_id: user.id,
+      title: questData.title,
+      description: questData.description || null,
+      tier: questData.tier,
+      default_unit_type: questData.defaultUnitType,
+      default_target: questData.defaultTarget,
+      default_operator: questData.defaultOperator
+    }).select().single();
 
-    if (!error && data) {
-      // Replace temp ID with real ID
-      setQuests(prev => prev.map(q => q.id === tempId ? { ...q, id: data.id } : q));
+    if (inserted) {
+      setQuests(prev => prev.map(q => q.id === tempId ? { ...q, id: inserted.id } : q));
     }
   };
 
-  const updateQuest = async (id: string, updates: { title: string; description?: string; difficulty: 'easy' | 'medium' | 'boss' }) => {
-    let xpReward = 10;
-    let coinReward = 5;
-    
-    if (updates.difficulty === 'medium') {
-      xpReward = 30;
-      coinReward = 15;
-    } else if (updates.difficulty === 'boss') {
-      xpReward = 50;
-      coinReward = 25;
-    }
+  const updateQuest = async (id: string, updates: Partial<Omit<Quest, 'id' | 'logs'>>) => {
+    setQuests(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q));
 
-    // Optimistic UI
-    setQuests((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, ...updates, xpReward, coinReward } : q))
-    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-    // Update DB
-    await supabase
-      .from('quests')
-      .update({
-        title: updates.title,
-        description: updates.description || null,
-        difficulty: updates.difficulty,
-        xp_reward: xpReward,
-        coin_reward: coinReward,
-      })
-      .eq('id', id);
+    await supabase.from('quests').update({
+      ...(updates.title && { title: updates.title }),
+      ...(updates.description !== undefined && { description: updates.description || null }),
+      ...(updates.tier && { tier: updates.tier }),
+      ...(updates.defaultUnitType && { default_unit_type: updates.defaultUnitType }),
+      ...(updates.defaultTarget !== undefined && { default_target: updates.defaultTarget }),
+      ...(updates.defaultOperator && { default_operator: updates.defaultOperator })
+    }).eq('id', id).eq('user_id', user.id);
   };
-
-  // Also keep old functions for backward compatibility (using today's date)
-  const completeQuest = (id: string) => logQuest(id, getTodayDate(), 'completed');
-  const failQuest = (id: string) => logQuest(id, getTodayDate(), 'failed');
-  const resetQuest = (id: string) => resetQuestLog(id, getTodayDate());
 
   return (
     <QuestContext.Provider value={{ 
       quests, 
-      logQuest, 
-      resetQuestLog, 
       addQuest, 
-      updateQuest,
-      // @ts-ignore: Keep old functions for now to prevent breaking
-      completeQuest,
-      failQuest,
-      resetQuest,
+      updateQuest, 
+      getTodayLog, 
+      getLogForDate,
+      updateLog,
+      logQuest, 
+      resetTodayLog,
+      resetLog
     }}>
       {children}
     </QuestContext.Provider>
@@ -362,8 +342,6 @@ export const QuestProvider = ({ children }: { children: ReactNode }) => {
 
 export const useQuests = () => {
   const context = useContext(QuestContext);
-  if (!context) {
-    throw new Error('useQuests must be used within a QuestProvider');
-  }
+  if (!context) throw new Error('useQuests must be used within QuestProvider');
   return context;
 };

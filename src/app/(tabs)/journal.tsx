@@ -5,7 +5,69 @@ import { useQuests } from '@/context/QuestContext';
 
 export default function Journal() {
   const { quests } = useQuests();
-  const pastQuests = quests.filter((q) => q.completed || q.failed);
+
+  // Collect all non-active logs across all quests, enriched with quest info
+  const historyEntries = quests.flatMap(q =>
+    q.logs
+      .filter(log => log.status !== 'active')
+      .map(log => ({
+        id: log.id,
+        questTitle: q.title,
+        tier: q.tier,
+        status: log.status as 'completed' | 'failed' | 'skip',
+        metric: log.metric,
+        unitType: log.unitType,
+        logDate: log.logDate,
+      }))
+  ).sort((a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime());
+
+  const getRewardForTier = (tier: 'Easy' | 'Medium' | 'Boss') => {
+    switch (tier) {
+      case 'Easy': return { xp: 10, coins: 5 };
+      case 'Medium': return { xp: 30, coins: 15 };
+      case 'Boss': return { xp: 50, coins: 25 };
+    }
+  };
+
+  const renderEntry = ({ item }: { item: typeof historyEntries[number] }) => {
+    const isCompleted = item.status === 'completed';
+    const isFailed = item.status === 'failed';
+    const reward = getRewardForTier(item.tier);
+
+    return (
+      <View style={[
+        styles.logEntry,
+        isCompleted ? styles.logSuccess : isFailed ? styles.logFailure : styles.logSkipped,
+      ]}>
+        <View style={styles.logHeader}>
+          <Text style={styles.logTitle}>{item.questTitle}</Text>
+          <Text style={[styles.logStatus, {
+            color: isCompleted ? Colors.dark.neonGreen
+                 : isFailed ? Colors.dark.neonRed
+                 : Colors.dark.textSecondary,
+          }]}>
+            {isCompleted ? '✓ COMPLETED' : isFailed ? '✗ FAILED' : '○ SKIPPED'}
+          </Text>
+        </View>
+        <Text style={styles.logDate}>{item.logDate}</Text>
+        <Text style={[styles.tierBadge, {
+          color: item.tier === 'Easy' ? Colors.dark.neonGreen
+               : item.tier === 'Medium' ? Colors.dark.neonPurple
+               : Colors.dark.neonRed,
+        }]}>
+          [{(item.tier || 'Easy').toUpperCase()}]
+        </Text>
+        {isCompleted && (
+          <Text style={styles.rewardText}>
+            Gained {reward.xp} XP, {reward.coins} Coins
+          </Text>
+        )}
+        {isFailed && (
+          <Text style={styles.damageText}>Took damage. Streak lost.</Text>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -14,24 +76,10 @@ export default function Journal() {
         <Text style={styles.subtext}>Your history of triumphs and failures.</Text>
 
         <FlatList
-          data={pastQuests}
+          data={historyEntries}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <View style={[styles.logEntry, item.completed ? styles.logSuccess : styles.logFailure]}>
-              <View style={styles.logHeader}>
-                <Text style={styles.logTitle}>{item.title}</Text>
-                <Text style={[styles.logStatus, { color: item.completed ? Colors.dark.neonCyan : Colors.dark.neonRed }]}>
-                  {item.completed ? 'COMPLETED' : 'FAILED'}
-                </Text>
-              </View>
-              {item.completed ? (
-                <Text style={styles.rewardText}>Gained {item.xpReward} XP, {item.coinReward} Coins</Text>
-              ) : (
-                <Text style={styles.damageText}>Took damage. Streak lost.</Text>
-              )}
-            </View>
-          )}
+          renderItem={renderEntry}
           ListEmptyComponent={() => (
             <Text style={styles.emptyText}>No quests recorded yet. Go make some history.</Text>
           )}
@@ -77,16 +125,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.backgroundElement,
   },
   logSuccess: {
-    borderColor: Colors.dark.neonCyan,
+    borderColor: Colors.dark.neonGreen,
   },
   logFailure: {
     borderColor: Colors.dark.neonRed,
+  },
+  logSkipped: {
+    borderColor: Colors.dark.textSecondary,
   },
   logHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   logTitle: {
     color: Colors.dark.text,
@@ -98,6 +149,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  logDate: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  tierBadge: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 6,
   },
   rewardText: {
     color: Colors.dark.neonCyan,
@@ -113,4 +174,5 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontStyle: 'italic',
   },
+
 });
